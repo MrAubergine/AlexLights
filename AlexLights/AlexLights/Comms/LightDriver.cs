@@ -3,6 +3,7 @@ using Java.Util;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 
 namespace AlexLights.Comms
 {
@@ -15,9 +16,14 @@ namespace AlexLights.Comms
         private BluetoothDevice btDevice = null;
         private UUID sppUUID = null;
         private BluetoothSocket btSocket = null;
-        private bool btConnected = false;
 
-        private bool connected;
+        private Thread rdThread = null;
+        private object rdLock = new Object();
+        private int rdBufferCount = 0;
+        private static int rdBufferMax = 32;
+        private byte[] rdBuffer = new byte[rdBufferMax];
+
+        System.Threading.Timer autoCloseTimer = null;
 
         public static LightDriver Instance
         {
@@ -36,41 +42,55 @@ namespace AlexLights.Comms
             }
         }
 
-        private LightDriver() { }
+        private LightDriver()
+        {
+            // Get the adapter, device, and SPP UUID
+            btAdapter = BluetoothAdapter.DefaultAdapter;
+            if (btAdapter == null)
+                return;
+ 
+            var devices = btAdapter.BondedDevices;
+            foreach (BluetoothDevice device in devices)
+            {
+                if (device.Name == "Adafruit EZ-Link a131")
+                {
+                    btDevice = device;
+                    break;
+                }
+            }
+            if (btDevice == null)
+                return;
+
+            sppUUID = UUID.FromString("00001101-0000-1000-8000-00805F9B34FB");
+
+            autoCloseTimer = new System.Threading.Timer(new TimerCallback(AutoDisconnect),this,-1,-1);
+        }
 
         private bool Connect()
         {
-            if (btAdapter == null)
+            // Early out if we already have a socket and a reader thread
+            if (btSocket != null && rdThread != null && rdThread.IsAlive)
+                return true;
+
+            // Tidy up if necessary
+            if (btSocket != null)
             {
-                btAdapter = BluetoothAdapter.DefaultAdapter;
-                if (btAdapter == null)
-                    return false;
+                btSocket.Close();
+                btSocket = null;
+            }
+            if(rdThread != null)
+            {
+                if (rdThread.IsAlive)
+                    rdThread.Abort();
+                rdThread = null;
             }
 
-            if (btDevice == null)
-            {
-                var devices = btAdapter.BondedDevices;
-                foreach (BluetoothDevice device in devices)
-                {
-                    if (device.Name == "Adafruit EZ-Link a131")
-                    {
-                        btDevice = device;
-                        break;
-                    }
-                }
-                if (btDevice == null)
-                    return false;
-            }
-
+            // If we don't have an SPP UID then initialisation failed
             if (sppUUID == null)
-            {
-                sppUUID = UUID.FromString("00001101-0000-1000-8000-00805F9B34FB");
-            }
+                return false;
 
-            if (btSocket == null)
-            {
-                btSocket = btDevice.CreateInsecureRfcommSocketToServiceRecord(sppUUID);
-            }
+            // Create the socket and try to connect
+            btSocket = btDevice.CreateInsecureRfcommSocketToServiceRecord(sppUUID);
             if (btSocket == null)
                 return false;
 
@@ -80,17 +100,85 @@ namespace AlexLights.Comms
             }
             catch (Exception)
             {
+                btSocket = null;
                 return false;
             }
 
+            // Start the receive thread
+            rdThread = new Thread(SocketReaderWorker);
+            rdThread.Start();
+            while (!rdThread.IsAlive) ;
+            
             return true;
         }
 
-        private void Close()
+        private void SocketReaderWorker()
+        {
+            rdBufferCount = 0;
+            byte[] buffer = new byte[rdBufferMax];
+            while (true && btSocket != null)
+            {
+                try
+                {
+                    int read = btSocket.InputStream.Read(buffer, 0, rdBufferMax - rdBufferCount);
+                    if(read==0)
+                    {
+                        break;
+                    }
+                    else
+                    {
+                        lock (rdLock)
+                        {
+                            Array.Copy(buffer, 0, rdBuffer, rdBufferCount, read);
+                            rdBufferCount += read;
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                    break;
+                }
+            }
+        }
+
+        private int AvailableInput()
+        {
+            return rdBufferCount;
+        }
+
+        private string InputString()
+        {
+            string retstr;
+
+            lock(rdLock)
+            {
+                retstr = Encoding.ASCII.GetString(rdBuffer, 0, rdBufferCount);
+                rdBufferCount = 0;
+            }
+
+            return retstr;
+        }
+
+        private bool WriteString(string str)
+        {
+            if (btSocket == null)
+                return false;
+
+            btSocket.OutputStream.Write(Encoding.ASCII.GetBytes(str), 0, str.Length);
+            return true;
+        }
+
+        private void AutoDisconnect(object state)
+        {
+            ((LightDriver)state).Disconnect();
+        }
+
+        private void Disconnect()
         {
             if (btSocket != null)
             {
                 btSocket.Close();
+                btSocket = null;
             }
         }
 
@@ -99,8 +187,19 @@ namespace AlexLights.Comms
             if (!Connect())
                 return false;
 
-            btSocket.OutputStream.WriteByte(42);
-            Close();
+            autoCloseTimer.Change(10000, -1);
+
+            for(int i=0; i<32; i++)
+            {
+                WriteString("*");
+                if (AvailableInput() != 0)
+                    break;
+            }
+
+            if( InputString()=="R")
+            {
+                WriteString(str);
+            }
 
             return true;
         }
