@@ -19,7 +19,7 @@ namespace AlexLights.Comms
 
         private Thread rdThread = null;
         private object rdLock = new Object();
-        private int rdBufferCount = 0;
+        private volatile int rdBufferCount = 0;
         private static int rdBufferMax = 32;
         private byte[] rdBuffer = new byte[rdBufferMax];
 
@@ -52,9 +52,10 @@ namespace AlexLights.Comms
             var devices = btAdapter.BondedDevices;
             foreach (BluetoothDevice device in devices)
             {
-                if (device.Name == "Adafruit EZ-Link a131")
+                if (device.Name == "Adafruit EZ-Link a131") // dev board
+//                if (device.Name == "Adafruit EZ-Link a5bf") // real room lights
                 {
-                    btDevice = device;
+                        btDevice = device;
                     break;
                 }
             }
@@ -159,6 +160,14 @@ namespace AlexLights.Comms
             return retstr;
         }
 
+        private void FlushInputString()
+        {
+            lock (rdLock)
+            {
+                rdBufferCount = 0;
+            }
+        }
+
         private bool WriteString(string str)
         {
             if (btSocket == null)
@@ -187,16 +196,19 @@ namespace AlexLights.Comms
             if (!Connect())
                 return false;
 
-            autoCloseTimer.Change(10000, -1);
+            autoCloseTimer.Change(120000, -1);
 
-            for(int i=0; i<32; i++)
+            FlushInputString();
+
+            for (int i=0; i<64; i++)
             {
                 WriteString("*");
+                Thread.Sleep(2);
                 if (AvailableInput() != 0)
                     break;
             }
 
-            if( InputString()=="R")
+            if( AvailableInput() !=0 && InputString()[0]=='R')
             {
                 WriteString(str);
             }

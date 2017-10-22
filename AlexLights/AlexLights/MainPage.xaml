@@ -5,4 +5,5 @@
              x:Class="AlexLights.MainPage">
   <!--Pages can be added as references or inline-->
     <page:SolidColourPage Title="Solid"/>
+    <page:RainbowPage Title="Rainbow"/>
 </TabbedPage>
