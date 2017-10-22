@@ -16,6 +16,7 @@ Global
 		AlexLights\AlexLights\AlexLights.projitems*{76a5f1a6-e245-41df-a892-f70c7e5d624d}*SharedItemsImports = 4
 		AlexLights\AlexLights\AlexLights.projitems*{a9a18380-b494-4f55-bbf1-c1fc0c37e23c}*SharedItemsImports = 13
 		AlexLights\AlexLights\AlexLights.projitems*{d1b34b14-0124-45ec-8fda-beb25e27c688}*SharedItemsImports = 4
+		AlexLights\AlexLights\AlexLights.projitems*{ee3fc9b2-f04d-4e8c-b674-95183e54f442}*SharedItemsImports = 4
 	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Ad-Hoc|Any CPU = Ad-Hoc|Any CPU

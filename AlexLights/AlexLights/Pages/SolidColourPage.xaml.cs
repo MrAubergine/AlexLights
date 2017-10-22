@@ -20,9 +20,21 @@ namespace AlexLights.Pages
 			InitializeComponent ();
 		}
 
-        private void OnBoopClicked(object sender, EventArgs e)
+        private void OnRedClicked(object sender, EventArgs e)
         {
-            LightDriver.Instance.SendString("");
+            LightDriver.Instance.SendString("SC880000");
+        }
+        private void OnGreenClicked(object sender, EventArgs e)
+        {
+            LightDriver.Instance.SendString("SC008800");
+        }
+        private void OnBlueClicked(object sender, EventArgs e)
+        {
+            LightDriver.Instance.SendString("SC000088");
+        }
+        private void OnWhiteClicked(object sender, EventArgs e)
+        {
+            LightDriver.Instance.SendString("SC888888");
         }
     }
 }
